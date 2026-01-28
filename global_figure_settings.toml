@@ -1,0 +1,131 @@
+[plt-runconfig] # this will be sent to plt rc
+xtick.labelsize = 11
+ytick.labelsize = 11
+xtick.direction = "in"
+ytick.direction = "in"
+axes.labelsize = 11
+axes.titlesize = 11
+legend.fontsize = 11
+figure.titlesize = 11
+font.family = "Helvetica Neue"
+
+[subfigure-label]
+font.size = 12
+
+
+[graph]
+linewidth = 1.5
+which_nodes_to_label = "none" # can be "none", "all", or "boundary"
+
+# we draw nodes with an inner and outer circle of different colors.
+[graph.nodes]
+hyperbolic_spacing = 0.45
+outer.size = 25
+inner.size = 9
+
+[graph.nodes.boundary]
+inner.color = "#cbffad"
+outer.color = "#2ca02c" # this is equivalent to "tab:green"
+other_geodesics.color = "#2ca02c"
+outer.size = 80
+
+[graph.nodes.selected_boundary]
+inner.color = "#ffc0cb" # light pink
+outer.color = "#574242ff" # deep pink
+boundary.color = "#ffc0cb" # light pink
+ryu_takayanagi.color = "#e52d67ff" # hot pink
+cft_prediction.color = "#932145ff" # hot pink
+outer.size = 80
+
+[graph.nodes.ancilla]
+inner.color = "#adedff"
+outer.color = "#1f77b4" # this is equivalent to "tab:blue"
+outer.size = 80
+
+[graph.nodes.ancilla_secondary]
+inner.color = "#ffff88" # this is yellow
+outer.color = "#aaaa00"
+outer.size = 60
+
+[graph.nodes.post_measurement]
+inner.color = "#eeeeee" 
+outer.color = "#969696ff" 
+
+[graph.nodes.neck]
+inner.color = "#adedff" # we decided to not color it differently "#ffccff" # some purple
+outer.color = "#1f77b4" # we decided to not color it differently "#990099" # a deeper purple
+
+[operations.measure]
+color = "#9467bd" # this is equivalent to "tab:purple"
+size = 0.95
+alpha = 0.3
+
+[operations.displace]
+color = "#ff0000" # this is red. probably should be tweaked.
+size = 0.3
+alpha = 0.3
+
+[default-figure]
+width = 3
+height = 3
+
+[figure-1.graph]
+depth = 4
+coupling_time = 1
+squeezing = 0.2
+
+[figure-1.entropies]
+region_size_for_renyi_entropies = 4
+
+
+
+# This column explains the protocol 
+[figure-1.column-1]
+width = 5
+height = 5
+
+
+# This column contains the entanglement entropy and Renyi entropy plots
+[figure-1.column-2]
+width = 5
+height = 5
+
+# This column shows random bipartitions as a function of squeezing.
+# Should produce absolutely maximally entangled states in the limit of
+# large squeezing.
+[figure-1.column-3]
+width = 5
+height = 5
+
+
+[decorated-figure.column-1]
+width = 5
+height = 5
+
+[decorated-figure.edges]
+positive.color = "#dd3e3eff"
+negative.color = "#3ea7f3ff"
+
+[wormhole-figure]
+width = 10
+height = 5
+
+[wormhole-figure.wormhole]
+# The neck includes all segments of minimum number of nodes. E.g [16 8 4 4 4 4 8 16] would have a neck_length of 4
+neck_length = 2 # this is the number of layers of the neck. If zero, the two graphs just touch. 
+start_depth = 4 # this is the cut-out depth at which we glue two graphs together
+end_depth = 6 # this is the full depth of each half of the wormhole
+
+[wormhole-figure.view]
+azim = 0
+elev = 20
+roll = 90
+projection = "ortho"
+
+
+
+
+
+
+
+

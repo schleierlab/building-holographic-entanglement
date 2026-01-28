@@ -1,0 +1,23 @@
+#!/usr/bin/env python3
+"""Wrapper script for testing notebooks."""
+import sys
+from pathlib import Path
+
+# Add repo to path
+repo_root = Path(__file__).parent
+sys.path.insert(0, str(repo_root))
+
+# Import and run the test
+from tests.test_notebooks import test_all_notebooks, test_notebooks_quick_check
+
+if __name__ == "__main__":
+    if "--quick" in sys.argv:
+        sys.exit(test_notebooks_quick_check())
+    
+    pattern = None
+    for arg in sys.argv[1:]:
+        if not arg.startswith('-'):
+            pattern = arg
+            break
+    
+    sys.exit(test_all_notebooks(pattern))
