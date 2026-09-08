@@ -13,23 +13,24 @@ sys.path.insert(0, str(repo_root))
 
 
 def normalize_pattern(pattern):
-    """Convert a pattern like '3', 'a1', 'A01' to a glob pattern.
+    """Convert a pattern like '3', 's3', 'S03' to a glob pattern.
 
     Examples:
         '3' -> '03_*.ipynb'
         '03' -> '03_*.ipynb'
-        'a1' -> 'A01_*.ipynb'
-        'A1' -> 'A01_*.ipynb'
+        's3' -> 'S03_*.ipynb'
+        'S3' -> 'S03_*.ipynb'
     """
     pattern = pattern.lower()
 
-    # Check if it's an appendix notebook (starts with 'a')
-    if pattern.startswith('a'):
-        # Remove 'a' prefix and get the number
+    # Check if it's a supplementary notebook (starts with 's').
+    # The old 'a' prefix is kept as a convenience alias.
+    if pattern.startswith(('s', 'a')):
+        # Remove prefix and get the number
         num_str = pattern[1:]
         try:
             num = int(num_str)
-            return f"A{num:02d}_*.ipynb"
+            return f"S{num:02d}_*.ipynb"
         except ValueError:
             # If can't parse, return pattern as-is with wildcard
             return f"{pattern}*.ipynb"
@@ -44,17 +45,19 @@ def normalize_pattern(pattern):
 
 
 def find_notebooks(pattern=None):
-    """Find notebook files in the repository root.
+    """Find notebook files in the repository root and supplementary folder.
 
     Args:
-        pattern: Optional pattern like '3', 'a1', etc. to match specific notebooks.
+        pattern: Optional pattern like '3', 's3', etc. to match specific notebooks.
                  If None, returns all notebooks.
     """
     if pattern:
         glob_pattern = normalize_pattern(pattern)
         notebooks = sorted(repo_root.glob(glob_pattern))
+        notebooks.extend(sorted((repo_root / "supplementary-notebooks").glob(glob_pattern)))
     else:
         notebooks = sorted(repo_root.glob("*.ipynb"))
+        notebooks.extend(sorted((repo_root / "supplementary-notebooks").glob("*.ipynb")))
 
     # Filter out checkpoint files
     notebooks = [nb for nb in notebooks if ".ipynb_checkpoints" not in str(nb)]

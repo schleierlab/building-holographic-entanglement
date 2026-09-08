@@ -18,7 +18,17 @@ from .standard import (
 )
 
 from .hyperbolic import (
+    generate_hyperbolic_tiling_with_hypertiling,
+    generate_hyperbolic_tiling_3_q_geometric_with_raw,
     generate_hyperbolic_tiling_3_8_geometric_with_raw,
+)
+
+from .regular import (
+    RegularTilingSpec,
+    decorate_regular_patch,
+    generate_regular_patch,
+    label_circular_boundary_from_embedding,
+    supported_regular_tilings,
 )
 
 from .validation import (
@@ -28,6 +38,7 @@ from .validation import (
 # Make submodules accessible
 from . import standard
 from . import hyperbolic
+from . import regular
 from . import validation
 
 __all__ = [
@@ -35,10 +46,18 @@ __all__ = [
     'crosslinked_tree',
     'crosslinked_tree_with_hole',
     'subdivided_tree_decoration_1',
+    'generate_hyperbolic_tiling_with_hypertiling',
+    'generate_hyperbolic_tiling_3_q_geometric_with_raw',
     'generate_hyperbolic_tiling_3_8_geometric_with_raw',
+    'RegularTilingSpec',
+    'decorate_regular_patch',
+    'generate_regular_patch',
+    'label_circular_boundary_from_embedding',
+    'supported_regular_tilings',
     'check_labels',
     # Submodules
     'standard',
     'hyperbolic',
+    'regular',
     'validation',
 ]

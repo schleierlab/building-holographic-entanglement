@@ -1,4 +1,4 @@
-"""Functions for A2_scaling_dimensions.ipynb - Scaling dimension dependence on squeezing."""
+"""Helper functions for supplementary scaling-dimension figures."""
 
 from __future__ import annotations
 

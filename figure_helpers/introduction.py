@@ -24,15 +24,29 @@ def set_config_for_introduction(config):
     config_to_use = config
 
 
+def _figure_1_params(config, figure_params=None):
+    if figure_params is not None:
+        return figure_params
+    if "figure-1" not in config:
+        raise ValueError("Figure 1 parameters now live in 01_introduction.ipynb; pass figure_params.")
+    figure_config = config["figure-1"]
+    return {
+        "graph_depth": figure_config["graph"]["depth"],
+        "coupling_time": figure_config["graph"]["coupling_time"],
+        "squeezing": figure_config["graph"]["squeezing"],
+        "region_size_for_renyi_entropies": figure_config["entropies"]["region_size_for_renyi_entropies"],
+    }
 
-def plot_protocol(axs, use_poincare_layout=True, label=False, config=None):
-    """The protocol comprises the left column of Figure 1."""
+
+def plot_protocol(axs, use_poincare_layout=True, label=False, config=None, figure_params=None):
+    """This function plots the quench-and-measure protocol."""
 
     if config is None:
         global config_to_use
         config = config_to_use
     
     assert config is not None, "You must provide a config either as an argument or by calling set_config_for_introduction first."
+    figure_params = _figure_1_params(config, figure_params)
 
     axs = np.array(axs)
     axs_flat = axs.flatten()
@@ -67,7 +81,7 @@ def plot_protocol(axs, use_poincare_layout=True, label=False, config=None):
         )
         axs_flat[-1].add_patch(border)
 
-    depth = config["figure-1"]["graph"]["depth"]
+    depth = figure_params["graph_depth"]
 
     ctree: nx.Graph = graphs.crosslinked_tree(depth) # networkx graph object
     ptree = make_tree_periodic(ctree, remove_nodes=False)
@@ -244,7 +258,13 @@ def plot_protocol(axs, use_poincare_layout=True, label=False, config=None):
 
 # Analysis class is now imported from graph2grav.analysis
 
-def plot_entanglement_and_renyi_entropies(axs: list[plt.Axes], show_squeezing_instead=True, config=None, export_csv: str | None = None): # pyright: ignore
+def plot_entanglement_and_renyi_entropies(
+    axs: list[plt.Axes],
+    show_squeezing_instead=True,
+    config=None,
+    export_csv: str | None = None,
+    figure_params=None,
+): # pyright: ignore
     """Plot entanglement and Renyi entropies.
 
     Args:
@@ -259,6 +279,7 @@ def plot_entanglement_and_renyi_entropies(axs: list[plt.Axes], show_squeezing_in
         config = config_to_use
 
     assert config is not None, "You must provide a config either as an argument or by calling set_config_for_introduction first."
+    figure_params = _figure_1_params(config, figure_params)
 
     # Data collection for CSV export
     csv_data = {
@@ -266,7 +287,7 @@ def plot_entanglement_and_renyi_entropies(axs: list[plt.Axes], show_squeezing_in
         'renyi_entropies': []
     }
 
-    depth = config["figure-1"]["graph"]["depth"]
+    depth = figure_params["graph_depth"]
 
     ctree: nx.Graph = graphs.crosslinked_tree(depth) # networkx graph object
     ptree = make_tree_periodic(ctree, remove_nodes=False)
@@ -276,12 +297,12 @@ def plot_entanglement_and_renyi_entropies(axs: list[plt.Axes], show_squeezing_in
 
     analysis = Analysis(
         ptree,
-        couplingtime=config["figure-1"]["graph"]["coupling_time"],
-        global_presqueeze=config["figure-1"]["graph"]["squeezing"],
+        couplingtime=figure_params["coupling_time"],
+        global_presqueeze=figure_params["squeezing"],
         config=config,
     )
 
-    print("Using squeezing of mu = ", config["figure-1"]["graph"]["squeezing"])
+    print("Using squeezing of mu = ", figure_params["squeezing"])
 
 
     analysis.fit_central_charge()
@@ -300,11 +321,11 @@ def plot_entanglement_and_renyi_entropies(axs: list[plt.Axes], show_squeezing_in
         'offset_fit': analysis.cft_entropy_offset,
         'offset_stderr': analysis.cft_entropy_offset_stderr,
         'boundary_length': analysis.boundary_length,
-        'coupling_time': config["figure-1"]["graph"]["coupling_time"],
-        'squeezing': config["figure-1"]["graph"]["squeezing"],
+        'coupling_time': figure_params["coupling_time"],
+        'squeezing': figure_params["squeezing"],
     }
 
-    target_region_size = config["figure-1"]["entropies"]["region_size_for_renyi_entropies"]
+    target_region_size = figure_params["region_size_for_renyi_entropies"]
 
     fine_lengths = np.linspace(1, analysis.boundary_length-1, 1000)
 
@@ -331,8 +352,8 @@ def plot_entanglement_and_renyi_entropies(axs: list[plt.Axes], show_squeezing_in
     ptree = make_tree_periodic(ctree, remove_nodes=False)
 
 
-    geometric_mean_coupling_time = config["figure-1"]["graph"]["coupling_time"]
-    geometric_mean_squeezing = config["figure-1"]["graph"]["squeezing"]
+    geometric_mean_coupling_time = figure_params["coupling_time"]
+    geometric_mean_squeezing = figure_params["squeezing"]
     factor = 5
 
     if show_squeezing_instead:
@@ -353,7 +374,8 @@ def plot_entanglement_and_renyi_entropies(axs: list[plt.Axes], show_squeezing_in
         value_name = "Coupling Time"
         values = coupling_times
     
-    print(squeezing_values)
+    if show_squeezing_instead:
+        print(f"Squeezing values for Renyi entropy plot: {squeezing_values}")
 
     # cmap = plt.cm.viridis
     colors = ["#2d1e5e", "#e52d67", "#f3d656"]

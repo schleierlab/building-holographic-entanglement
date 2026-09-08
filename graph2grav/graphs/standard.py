@@ -310,6 +310,15 @@ def subdivided_tree(
 
         G = nx.relabel_nodes(G, {n: m for m, n in enumerate(G.nodes)}, copy=True)
 
+    if pre_remove_up_to_depth is not None:
+        remove_list = [
+            node
+            for node, data in G.nodes(data=True)
+            if data.get("depth") is not None and data["depth"] <= pre_remove_up_to_depth
+        ]
+        G.remove_nodes_from(remove_list)
+        G = nx.relabel_nodes(G, {n: m for m, n in enumerate(G.nodes)}, copy=True)
+
     G0 = G.copy()
     next_node_number = G.number_of_nodes()
 
@@ -398,7 +407,7 @@ def subdivided_tree(
             G.remove_node(node)
         # G.remove_nodes_from(burnlist)
 
-    nx.relabel_nodes(G, {n: m for m, n in enumerate(G.nodes)}, copy=False)
+    G = nx.relabel_nodes(G, {n: m for m, n in enumerate(G.nodes)}, copy=True)
 
     # Outdated code to add shortctuts
 
@@ -435,7 +444,8 @@ def subdivided_tree_decoration_1(
         probe_weight=1, remove_crown=False,
         only_subdivide_boundary=False,
         validate=True,
-        remove_up_to_depth=None
+        remove_up_to_depth=None,
+        pre_remove_up_to_depth=None
     ):
     """
     Create a tree with crosslinks between nodes at the same depth, and subdivide the edges.
@@ -475,6 +485,7 @@ def subdivided_tree_decoration_1(
 
     for node in G.nodes:
         G.nodes[node]["depth"] = tree_node_depth(node)
+        G.nodes[node]["position_in_layer"] = tree_node_rowindex(node)
 
     for edge in G.edges:
         G.edges[edge]["depth"] = min(G.nodes[edge[0]]["depth"], G.nodes[edge[1]]["depth"])
@@ -523,6 +534,15 @@ def subdivided_tree_decoration_1(
         G = nx.relabel_nodes(G, {n: m for m, n in enumerate(G.nodes)}, copy=True)
 
         main_graph_size = main_graph_size - 3
+
+    if pre_remove_up_to_depth is not None:
+        remove_list = [
+            node
+            for node, data in G.nodes(data=True)
+            if data.get("depth") is not None and data["depth"] <= pre_remove_up_to_depth
+        ]
+        G.remove_nodes_from(remove_list)
+        nx.relabel_nodes(G, {n: m for m, n in enumerate(G.nodes)}, copy=False)
 
     G0 = G.copy()
     next_node_number = G.number_of_nodes()
@@ -634,7 +654,7 @@ def subdivided_tree_decoration_1(
         for edge in remove_edge_list:
             G.remove_edge(*edge)
 
-    nx.relabel_nodes(G, {n: m for m, n in enumerate(G.nodes)}, copy=False)
+    G = nx.relabel_nodes(G, {n: m for m, n in enumerate(G.nodes)}, copy=True)
 
     # Outdated code to add shortctuts
 

@@ -23,4 +23,6 @@ def reload():
     plt.rc('xtick', direction=config["plt-runconfig"]["xtick"]["direction"])
     plt.rc('ytick', direction=config["plt-runconfig"]["ytick"]["direction"])
 
+    graph2grav.plotting.configure_depth_palette(config)
+
     return config

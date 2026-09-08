@@ -1,4 +1,4 @@
-"""Helper functions for 05_decorated_cartography.ipynb visualization."""
+"""Helper functions for cartography figure visualization."""
 
 import numpy as np
 import colorsys

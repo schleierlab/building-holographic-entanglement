@@ -12,6 +12,43 @@ font.family = "Helvetica Neue"
 [subfigure-label]
 font.size = 12
 
+[depth-palette]
+colormap = "viridis"
+depths = [3, 4, 5, 6]
+start = 0.1
+end = 0.8
+
+[systems.hyperbolic_37]
+color = "#2ca02c"
+
+[systems.hyperbolic_38]
+color = "#1f77b4"
+
+[inequality-diagnostics.points.satisfied]
+color = "green"
+size = 5
+alpha = 0.4
+
+[inequality-diagnostics.points.violated]
+color = "#d62728"
+size = 5
+alpha = 0.4
+
+[inequality-diagnostics.reference]
+color = "black"
+linewidth = 1.0
+linestyle = "--"
+alpha = 0.7
+
+[inequality-diagnostics.zero-lines]
+color = "#94a3b8"
+linewidth = 0.9
+linestyle = ":"
+alpha = 1.0
+
+[inequality-diagnostics.grid]
+alpha = 0.22
+
 
 [graph]
 linewidth = 1.5
@@ -69,35 +106,6 @@ alpha = 0.3
 width = 3
 height = 3
 
-[figure-1.graph]
-depth = 4
-coupling_time = 1
-squeezing = 0.2
-
-[figure-1.entropies]
-region_size_for_renyi_entropies = 4
-
-
-
-# This column explains the protocol 
-[figure-1.column-1]
-width = 5
-height = 5
-
-
-# This column contains the entanglement entropy and Renyi entropy plots
-[figure-1.column-2]
-width = 5
-height = 5
-
-# This column shows random bipartitions as a function of squeezing.
-# Should produce absolutely maximally entangled states in the limit of
-# large squeezing.
-[figure-1.column-3]
-width = 5
-height = 5
-
-
 [decorated-figure.column-1]
 width = 5
 height = 5
@@ -121,10 +129,6 @@ azim = 0
 elev = 20
 roll = 90
 projection = "ortho"
-
-
-
-
 
 
 

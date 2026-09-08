@@ -1,4 +1,4 @@
-"""Functions for A0_scaling.ipynb - Entanglement entropy scaling analysis."""
+"""Helper functions for supplementary scaling figures."""
 
 from __future__ import annotations
 
@@ -29,9 +29,7 @@ def plot_entanglement_entropy_scaling_with_depth(ax: plt.Axes, depths: list[int]
 
     # Use fixed squeezing and coupling time from config
 
-    # Color map for different depths
-    cmap = plt.cm.viridis  # pyright: ignore
-    colors = plotting.default_colors # [cmap(i / (len(depths) - 1)) if len(depths) > 1 else cmap(0.5) for i in range(len(depths))]
+    colors = [plotting.color_for_depth(depth) for depth in depths]
 
     for depth, color in zip(depths, colors):
         if is_decorated:
@@ -144,7 +142,7 @@ def plot_central_charge_versus_squeezing(ax: plt.Axes, squeezing_values, depths:
     assert config is not None, "You must provide a config."
 
     coupling_time = config["figure-1"]["graph"]["coupling_time"]
-    colors = plotting.default_colors
+    colors = [plotting.color_for_depth(depth) for depth in depths]
 
     for depth, color in zip(depths, colors):
         if is_decorated:

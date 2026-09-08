@@ -71,6 +71,52 @@ default_colors = [
     default_pink,
 ]
 
+depth_palette_depths = (3, 4, 5, 6)
+depth_palette_colormap = "viridis"
+depth_palette_start = 0.24
+depth_palette_end = 0.58
+depth_palette_values = np.linspace(
+    depth_palette_start, depth_palette_end, len(depth_palette_depths)
+)
+depth_colors = {}
+
+
+def configure_depth_palette(config: dict | None = None):
+    """Configure the shared supplemental-figure depth colors."""
+    global depth_palette_depths
+    global depth_palette_colormap
+    global depth_palette_start
+    global depth_palette_end
+    global depth_palette_values
+    global depth_colors
+
+    palette_config = {} if config is None else config.get("depth-palette", {})
+    depth_palette_depths = tuple(int(depth) for depth in palette_config.get("depths", depth_palette_depths))
+    depth_palette_colormap = str(palette_config.get("colormap", depth_palette_colormap))
+    depth_palette_start = float(palette_config.get("start", depth_palette_start))
+    depth_palette_end = float(palette_config.get("end", depth_palette_end))
+    depth_palette_values = np.linspace(
+        depth_palette_start, depth_palette_end, len(depth_palette_depths)
+    )
+    colormap = plt.get_cmap(depth_palette_colormap)
+    depth_colors = {
+        depth: colormap(value)
+        for depth, value in zip(depth_palette_depths, depth_palette_values)
+    }
+
+
+def color_for_depth(depth: int):
+    """Return the shared supplemental-figure depth color."""
+    if depth in depth_colors:
+        return depth_colors[depth]
+    span = max(1, max(depth_palette_depths) - min(depth_palette_depths))
+    normalized = (int(depth) - min(depth_palette_depths)) / span
+    value = depth_palette_start + (depth_palette_end - depth_palette_start) * normalized
+    return plt.get_cmap(depth_palette_colormap)(value)
+
+
+configure_depth_palette()
+
 helvetica_font = {"family": "HelveticaNeue"}
 
 default_cycle = cycler(color=default_colors)

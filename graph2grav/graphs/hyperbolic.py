@@ -1,14 +1,16 @@
 """Hyperbolic geometry and hyperbolic tiling graph generation.
 
 This module provides functions for:
-- Hyperbolic geometry operations in the Poincaré disk model
-- Generation of hyperbolic tilings: {4,5} and {3,8}
+- Hyperbolic geometry operations in the Poincare disk model
+- Generation of regular hyperbolic `{p,q}` tilings
+- The original vertex-growth `{3,q}` generator as a reference implementation
 """
 
 import networkx as nx
 import numpy as np
 import collections
 import math
+import warnings
 from typing import Dict, Any, Optional, List, Tuple
 from copy import deepcopy
 from pydantic import ValidationError
@@ -89,6 +91,89 @@ def find_neighbor_coords(center_coord: complex, parent_coord: Optional[complex],
 
 
 # --- Hyperbolic Tiling Generation Functions ---
+
+
+def _coordinate_key(point: complex, *, decimals: int = 9) -> tuple[float, float]:
+    return (round(float(point.real), decimals), round(float(point.imag), decimals))
+
+
+def generate_hyperbolic_tiling_with_hypertiling(
+    p: int,
+    q: int,
+    depth: int,
+    *,
+    center: str = "vertex",
+) -> nx.Graph:
+    """Generate a regular hyperbolic vertex graph using ``hypertiling``.
+
+    ``hypertiling`` constructs the regular polygon cells and their Poincare-disk
+    coordinates. This adapter merges coincident polygon vertices and records
+    edge face incidence so the finite patch's outer perimeter can be identified
+    without geometric or degree heuristics.
+    """
+
+    if not isinstance(p, int) or not isinstance(q, int) or p < 3 or q < 3:
+        raise ValueError("p and q must be integers greater than or equal to 3.")
+    if 1.0 / p + 1.0 / q >= 0.5:
+        raise ValueError(f"{{{p},{q}}} is not a hyperbolic regular tiling.")
+    if not isinstance(depth, int) or depth < 1:
+        raise ValueError("depth must be a positive integer.")
+    if center not in {"vertex", "cell"}:
+        raise ValueError("center must be either 'vertex' or 'cell'.")
+
+    try:
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="Failed to import numba.*",
+                module="hypertiling.check_numba",
+            )
+            import hypertiling
+    except ImportError as exc:
+        raise ImportError(
+            "Hyperbolic regular patches require the 'hypertiling' package."
+        ) from exc
+
+    tiling = hypertiling.HyperbolicTiling(p, q, depth, center=center)
+    graph = nx.Graph()
+    vertex_ids: dict[tuple[float, float], int] = {}
+
+    for polygon in tiling:
+        polygon_vertices = tuple(complex(point) for point in polygon[1:])
+        if len(polygon_vertices) != p:
+            raise RuntimeError(
+                f"hypertiling returned {len(polygon_vertices)} vertices for a {p}-gon."
+            )
+
+        face_vertices = []
+        for point in polygon_vertices:
+            key = _coordinate_key(point, decimals=10)
+            node = vertex_ids.get(key)
+            if node is None:
+                node = len(vertex_ids)
+                vertex_ids[key] = node
+                graph.add_node(
+                    node,
+                    coord=point,
+                    ambient_degree=q,
+                )
+            face_vertices.append(node)
+
+        for index, node in enumerate(face_vertices):
+            neighbor = face_vertices[(index + 1) % p]
+            if graph.has_edge(node, neighbor):
+                graph.edges[node, neighbor]["face_incidence"] += 1
+            else:
+                graph.add_edge(node, neighbor, face_incidence=1)
+
+    graph.graph["ambient_degree"] = q
+    graph.graph["generator"] = "hypertiling_srs"
+    graph.graph["hypertiling_version"] = getattr(hypertiling, "__version__", "unknown")
+    graph.graph["hypertiling_cell_count"] = len(tiling)
+    graph.graph["hypertiling_center"] = center
+    graph.graph["schlafli_symbol"] = f"{{{p},{q}}}"
+    return graph
+
 
 def pentagonal_tiling(depth, validate=True):
     """
@@ -387,308 +472,312 @@ def generate_order5_square_tiling(depth):
     return G
 
 
+def _hyperbolic_edge_distance(p: int, q: int) -> float:
+    """Return the hyperbolic edge length for a regular `{p,q}` tiling."""
+
+    cosh_d_val = (
+        math.cos(2.0 * math.pi / p) + math.cos(math.pi / q) ** 2
+    ) / (math.sin(math.pi / q) ** 2)
+    if cosh_d_val < 1.0 - 1e-12:
+        raise ValueError(f"Invalid edge distance for {{{p},{q}}}: cosh(d)={cosh_d_val}")
+    return math.acosh(max(1.0, cosh_d_val))
+
+
+def generate_hyperbolic_tiling_3_q_geometric_with_raw(
+    q_value: int,
+    depth: int,
+    epsilon: float = 1e-5,
+    merge_last_layer: bool = True,
+    prune_last_layer: bool = True,
+    merge_degree_one_boundary: bool = True,
+) -> Tuple[Optional[nx.Graph], List[Dict]]:
+    """
+    Generate a `{3,q}` hyperbolic tiling vertex graph in the Poincare disk.
+
+    This is retained as the original reference implementation. The production
+    regular-tiling API uses :func:`generate_hyperbolic_tiling_with_hypertiling`.
+    The construction mirrors the existing `{3,8}` implementation: breadth-first
+    growth from the origin, geometric vertex identification by hyperbolic
+    proximity, optional pruning of the outer layer, and optional merging of
+    dangling degree-1 boundary nodes.
+    """
+
+    if q_value < 7:
+        raise ValueError("{3,q} is hyperbolic only for q >= 7.")
+    if depth < 0:
+        raise ValueError("Depth cannot be negative")
+    if depth == 0:
+        graph = nx.Graph()
+        graph.add_node(0, depth=0, coord=complex(0, 0))
+        return graph, []
+    try:
+        import numpy as np
+    except ImportError:
+        print("Error: numpy required.")
+        return None, []
+
+    graph = nx.Graph()
+    node_count = 0
+    node_info: Dict[int, Dict[str, Any]] = {}
+    coords_list: List[Tuple[complex, int]] = []
+    raw_neighbor_points: List[Dict] = []
+    processed_edges = set()
+
+    def add_edge_geo(u_id, v_id):
+        if u_id == v_id:
+            return
+        if u_id not in graph or v_id not in graph:
+            return
+        edge_tuple = tuple(sorted((u_id, v_id)))
+        if edge_tuple not in processed_edges:
+            graph.add_edge(u_id, v_id)
+            processed_edges.add(edge_tuple)
+
+    try:
+        edge_dist = _hyperbolic_edge_distance(3, q_value)
+    except ValueError as exc:
+        print(f"Error calc edge dist for {{3,{q_value}}}: {exc}")
+        return None, []
+    if edge_dist < 1e-9:
+        print("Warning: Edge dist near zero.")
+        return None, []
+
+    origin_id = node_count
+    node_count += 1
+    origin_coord = complex(0, 0)
+    node_info[origin_id] = {"id": origin_id, "depth": 0, "parent": -1, "coord": origin_coord}
+    coords_list.append((origin_coord, origin_id))
+    graph.add_node(origin_id, depth=0, coord=origin_coord)
+    frontier = collections.deque([origin_id])
+    processed_count = 0
+    nodes_created_last_layer = 0
+
+    print(
+        f"Starting Geometric BFS for {{3,{q_value}}} "
+        f"(MergeLastLayer={merge_last_layer}, PruneLastLayer={prune_last_layer}) "
+        f"up to depth {depth}..."
+    )
+
+    while frontier:
+        u_id = frontier.popleft()
+        if u_id not in node_info:
+            continue
+        u_data = node_info[u_id]
+        u_coord = u_data["coord"]
+        u_depth = u_data["depth"]
+        u_parent_id = u_data["parent"]
+        processed_count += 1
+        if processed_count % 100 == 0:
+            print(f"  Processed {processed_count} nodes...")
+        if u_depth >= depth:
+            continue
+
+        parent_coord = node_info[u_parent_id]["coord"] if u_parent_id != -1 else None
+
+        try:
+            potential_neighbor_coords = find_neighbor_coords(
+                u_coord,
+                parent_coord,
+                edge_dist,
+                q_value,
+            )
+        except Exception as exc:
+            print(f"Error finding neighbors for {u_id}: {exc}")
+            continue
+
+        for v_raw in potential_neighbor_coords:
+            raw_neighbor_points.append(
+                {
+                    "parent_id": u_id,
+                    "parent_coord": u_coord,
+                    "parent_depth": u_depth,
+                    "raw_coord": v_raw,
+                }
+            )
+
+        parent_candidate_coord = None
+        if parent_coord is not None:
+            min_dist_to_parent = float("inf")
+            for coord in potential_neighbor_coords:
+                if abs(coord) < 1.0:
+                    dist = poincare_dist(coord, parent_coord)
+                    if not math.isnan(dist) and dist < min_dist_to_parent:
+                        min_dist_to_parent = dist
+                        parent_candidate_coord = coord
+
+        for v_coord_raw in potential_neighbor_coords:
+            if (
+                parent_candidate_coord is not None
+                and poincare_dist(v_coord_raw, parent_candidate_coord) < epsilon
+            ):
+                continue
+
+            if abs(v_coord_raw) >= 1.0:
+                if abs(v_coord_raw) < 1.0 + 1e-9:
+                    v_coord_raw = v_coord_raw / abs(v_coord_raw) * (1.0 - 1e-12)
+                else:
+                    continue
+
+            min_dist_found = float("inf")
+            closest_existing_id = -1
+            for existing_coord, existing_id in coords_list:
+                if existing_id == u_id:
+                    continue
+                dist_check = poincare_dist(v_coord_raw, existing_coord)
+                if not math.isnan(dist_check) and dist_check < min_dist_found:
+                    min_dist_found = dist_check
+                    closest_existing_id = existing_id
+
+            should_merge = closest_existing_id != -1 and min_dist_found < epsilon
+            v_potential_depth = u_depth + 1
+            allow_merge = merge_last_layer or (v_potential_depth < depth)
+
+            if should_merge and allow_merge:
+                add_edge_geo(u_id, closest_existing_id)
+            else:
+                v_id = node_count
+                node_count += 1
+                if not allow_merge and v_potential_depth == depth and should_merge:
+                    nodes_created_last_layer += 1
+                node_info[v_id] = {
+                    "id": v_id,
+                    "depth": v_potential_depth,
+                    "parent": u_id,
+                    "coord": v_coord_raw,
+                }
+                coords_list.append((v_coord_raw, v_id))
+                graph.add_node(v_id, depth=v_potential_depth, coord=v_coord_raw)
+                add_edge_geo(u_id, v_id)
+                if v_potential_depth < depth:
+                    frontier.append(v_id)
+
+    print(
+        f"\nGeometric BFS complete. Nodes before pruning: {graph.number_of_nodes()}, "
+        f"Edges: {graph.number_of_edges()}"
+    )
+    if not merge_last_layer:
+        print(f"Debug: Created {nodes_created_last_layer} distinct nodes at max depth instead of merging.")
+
+    nodes_at_max_depth = []
+    if depth >= 0:
+        nodes_at_max_depth = [
+            nid
+            for nid, data in node_info.items()
+            if nid in graph and data.get("depth") == depth
+        ]
+
+    if prune_last_layer and nodes_at_max_depth:
+        print(f"Pruning {len(nodes_at_max_depth)} nodes at depth {depth}...")
+        graph.remove_nodes_from(nodes_at_max_depth)
+        print(
+            f"Graph after pruning: Nodes: {graph.number_of_nodes()}, "
+            f"Edges: {graph.number_of_edges()}"
+        )
+
+    if merge_degree_one_boundary:
+        print("Attempting to merge degree-1 boundary nodes...")
+        neighbors_of_degree_one = collections.defaultdict(list)
+        for node in list(graph.nodes()):
+            if graph.degree(node) == 1:
+                if node not in graph:
+                    continue
+                neighbor = list(graph.neighbors(node))[0]
+                neighbors_of_degree_one[neighbor].append(node)
+
+        nodes_merged_count = 0
+        for neighbor, degree_one_nodes in neighbors_of_degree_one.items():
+            if len(degree_one_nodes) > 1:
+                node_to_keep = min(degree_one_nodes)
+                nodes_to_merge = [n for n in degree_one_nodes if n != node_to_keep]
+                for node_to_merge in nodes_to_merge:
+                    if node_to_merge in graph:
+                        graph.remove_node(node_to_merge)
+                        node_info.pop(node_to_merge, None)
+                        coords_list = [
+                            (coord, nid) for coord, nid in coords_list if nid != node_to_merge
+                        ]
+                        nodes_merged_count += 1
+
+        if nodes_merged_count > 0:
+            print(f"Merged {nodes_merged_count} degree-1 nodes.")
+            print(
+                f"Graph after merging degree-1 nodes: Nodes: {graph.number_of_nodes()}, "
+                f"Edges: {graph.number_of_edges()}"
+            )
+
+    final_nodes = list(graph.nodes())
+    if not final_nodes:
+        actual_max_depth = -1
+        boundary_nodes = set()
+    else:
+        depths = [node_info[nid]["depth"] for nid in final_nodes if nid in node_info]
+        actual_max_depth = max(depths) if depths else -1
+        boundary_nodes = {
+            nid
+            for nid in final_nodes
+            if nid in node_info
+            and node_info[nid]["depth"] == actual_max_depth
+            and graph.degree(nid) < q_value
+        }
+
+    boundary_node_list = sorted(boundary_nodes)
+    boundary_pos_map = {node: i for i, node in enumerate(boundary_node_list)}
+
+    for node in final_nodes:
+        if node not in node_info:
+            continue
+        node_data = graph.nodes[node]
+        node_depth = node_info[node].get("depth", -1)
+        is_boundary = node in boundary_nodes
+
+        node_data["is_ancilla"] = not is_boundary
+        node_data["is_boundary"] = is_boundary
+        if is_boundary:
+            node_data["boundary_index"] = 0
+            node_data["position_in_boundary"] = boundary_pos_map.get(node, -1)
+            node_data["b0"] = True
+            for i in range(1, 10):
+                node_data[f"b{i}"] = False
+        else:
+            for i in range(10):
+                node_data[f"b{i}"] = False
+
+        node_data.setdefault("depth", node_depth)
+        node_data.setdefault("coord", node_info[node].get("coord", None))
+
+    graph = nx.convert_node_labels_to_integers(
+        graph,
+        ordering="sorted",
+        label_attribute="original_node",
+    )
+
+    graph.graph["number_of_boundaries"] = 1 if boundary_nodes else 0
+    graph.graph["max_depth"] = actual_max_depth
+    graph.graph["periodic"] = False
+    graph.graph["subdivided"] = False
+    graph.graph["schlafli_symbol"] = f"{{3,{q_value}}}"
+
+    graph_attrs_ref = graph.graph
+    for node in graph.nodes:
+        graph.nodes[node]["graph"] = graph_attrs_ref
+
+    return graph, raw_neighbor_points
+
+
 def generate_hyperbolic_tiling_3_8_geometric_with_raw(
     depth: int,
     epsilon: float = 1e-5,
     merge_last_layer: bool = True,
     prune_last_layer: bool = True,
-    merge_degree_one_boundary: bool = True # New parameter
-    ) -> Tuple[Optional[nx.Graph], List[Dict]]:
-    """
-    Generates the {3,8} tiling vertex graph using geometric construction
-    and also returns the list of raw potential neighbor coordinates calculated.
-    Includes option to disable vertex merging for the final layer,
-    option to prune nodes at the final depth layer, and option to merge
-    degree-1 boundary nodes connected to the same neighbor.
+    merge_degree_one_boundary: bool = True,
+) -> Tuple[Optional[nx.Graph], List[Dict]]:
+    """Backward-compatible wrapper for the `{3,8}` geometric generator."""
 
-    Args:
-        depth: Max depth from origin node 0.
-        epsilon: Tolerance for considering two points identical via distance check.
-        merge_last_layer: If False, vertices at max depth are not merged.
-        prune_last_layer: If True, removes all nodes at the maximum specified depth
-                          from the final graph.
-        merge_degree_one_boundary: If True, merges degree-1 nodes that share the
-                                   same neighbor after pruning.
-
-    Returns:
-        A tuple containing:
-        - NetworkX Graph object (or None on error).
-        - List of dictionaries for raw points:
-          {'parent_id': int, 'parent_coord': complex, 'parent_depth': int, 'raw_coord': complex}
-    """
-    if depth < 0: raise ValueError("Depth cannot be negative")
-    if depth == 0:
-        G = nx.Graph(); G.add_node(0, depth=0, coord=complex(0,0)); return G, []
-    try: import numpy as np
-    except ImportError: print("Error: numpy required."); return None, []
-
-    G = nx.Graph()
-    node_count = 0
-    # node_info stores metadata collected during BFS
-    node_info: Dict[int, Dict[str, Any]] = {}
-    # coords_list stores (coord, id) pairs for proximity checks
-    coords_list: List[Tuple[complex, int]] = []
-    # raw_neighbor_points stores dicts about calculated points before merging
-    raw_neighbor_points = []
-    # processed_edges stores tuples of sorted node IDs for edges added
-    processed_edges = set()
-
-    def add_edge_geo(u_id, v_id):
-        """Helper to add edges if they don't exist, u != v, and nodes exist."""
-        if u_id == v_id: return
-        # Ensure nodes exist before adding edge
-        if u_id not in G or v_id not in G: return
-        edge_tuple = tuple(sorted((u_id, v_id)))
-        if edge_tuple not in processed_edges:
-            G.add_edge(u_id, v_id)
-            processed_edges.add(edge_tuple)
-
-    # --- Calculate edge distance for {3,8} ---
-    p, q = 3, 8
-    edge_dist = -1.0
-    try:
-        # print("\n--- Calculating Edge Distance for {3,8} ---")
-        # Formula: cosh(d) = (cos(2pi/p) + cos^2(pi/q)) / sin^2(pi/q)
-        # Theoretical value for {3,8} is 1 + sqrt(2)
-        cosh_d_val = 1.0 + math.sqrt(2.0)
-        # print(f"Using theoretical cosh(d) = 1 + sqrt(2) = {cosh_d_val:.8f}")
-        if cosh_d_val < 1.0 - 1e-12: raise ValueError(f"cosh(d) < 1 calculated")
-        edge_dist = math.acosh(max(1.0, cosh_d_val))
-        # print(f"Hyperbolic edge distance d = acosh(cosh(d)) = {edge_dist:.8f}")
-        # r_euclidean = math.tanh(edge_dist / 2.0)
-        # print(f"Euclidean radius r = tanh(d/2) = {r_euclidean:.8f}")
-        # print("---------------------------------\n")
-    except ValueError as e: print(f"Error calc edge dist: {e}"); return None, []
-    if edge_dist < 1e-9: print("Warning: Edge dist near zero."); return None, []
-    # --- End Distance Calculation ---
-
-
-    # BFS Initialization
-    origin_id = node_count; node_count += 1
-    origin_coord = complex(0, 0)
-    node_info[origin_id] = {'id': origin_id, 'depth': 0, 'parent': -1, 'coord': origin_coord}
-    coords_list.append((origin_coord, origin_id))
-    G.add_node(origin_id, depth=0, coord=origin_coord)
-    q = collections.deque([origin_id])
-    processed_count = 0
-    nodes_created_last_layer = 0 # Debug counter
-    print(f"Starting Geometric BFS for {{3,8}} (MergeLastLayer={merge_last_layer}, PruneLastLayer={prune_last_layer}) up to depth {depth}...")
-
-    # BFS Loop
-    while q:
-        u_id = q.popleft()
-        if u_id not in node_info: continue
-        u_data = node_info[u_id]; u_coord = u_data['coord']; u_depth = u_data['depth']; u_parent_id = u_data['parent']
-        processed_count += 1
-        if processed_count % 100 == 0: print(f"  Processed {processed_count} nodes...")
-        # Stop generating *from* nodes at max depth
-        if u_depth >= depth: continue
-
-        parent_coord = node_info[u_parent_id]['coord'] if u_parent_id != -1 else None
-
-        # Find coordinates of the q=8 potential neighbors
-        num_neighbors_q = 8
-        try:
-             potential_neighbor_coords = find_neighbor_coords(u_coord, parent_coord, edge_dist, num_neighbors_q)
-        except Exception as e: print(f"Error finding neighbors for {u_id}: {e}"); continue
-
-        # Store Raw Coordinates
-        for v_raw in potential_neighbor_coords:
-             raw_neighbor_points.append({
-                 'parent_id': u_id, 'parent_coord': u_coord,
-                 'parent_depth': u_depth, 'raw_coord': v_raw
-             })
-
-        # Identify parent candidate among raw coords
-        parent_candidate_coord = None
-        if parent_coord is not None:
-            min_dist_to_parent = float('inf')
-            for coord in potential_neighbor_coords:
-                 if abs(coord) < 1.0:
-                     dist = poincare_dist(coord, parent_coord)
-                     if not math.isnan(dist) and dist < min_dist_to_parent:
-                          min_dist_to_parent = dist; parent_candidate_coord = coord
-
-        # Process the potential non-parent neighbors
-        for v_coord_raw in potential_neighbor_coords:
-             # Skip the coordinate identified as the parent candidate
-             if parent_candidate_coord is not None and poincare_dist(v_coord_raw, parent_candidate_coord) < epsilon:
-                 continue
-             # Check validity and pull back if slightly outside boundary
-             if abs(v_coord_raw) >= 1.0:
-                 if abs(v_coord_raw) < 1.0 + 1e-9: v_coord_raw = v_coord_raw / abs(v_coord_raw) * (1.0 - 1e-12)
-                 else: continue
-
-             # Vertex Identification (Proximity Check)
-             v_id = -1; found_existing = False; min_dist_found = float('inf'); closest_existing_id = -1
-             # Check proximity against ALL existing nodes except u_id itself
-             for existing_coord, existing_id in coords_list:
-                 if existing_id == u_id: continue
-                 dist_check = poincare_dist(v_coord_raw, existing_coord)
-                 if not math.isnan(dist_check) and dist_check < min_dist_found:
-                      min_dist_found = dist_check; closest_existing_id = existing_id
-
-             should_merge = (closest_existing_id != -1 and min_dist_found < epsilon)
-             v_potential_depth = u_depth + 1
-             allow_merge = merge_last_layer or (v_potential_depth < depth)
-
-             # Add Node/Edge
-             if should_merge and allow_merge:
-                  v_id = closest_existing_id
-                  add_edge_geo(u_id, v_id)
-             else:
-                  # Create new node
-                  v_id = node_count; node_count += 1
-                  if not allow_merge and v_potential_depth == depth:
-                       if should_merge:
-                           # print(f"Debug: Creating new node {v_id} at max depth {depth} instead of merging with {closest_existing_id} (dist {min_dist_found:.2e}). Parent={u_id}.")
-                           nodes_created_last_layer += 1
-                  node_info[v_id] = {'id': v_id, 'depth': v_potential_depth, 'parent': u_id, 'coord': v_coord_raw}
-                  coords_list.append((v_coord_raw, v_id))
-                  G.add_node(v_id, depth=v_potential_depth, coord=v_coord_raw)
-                  add_edge_geo(u_id, v_id)
-                  # Add to queue only if the *newly created* node is within depth limit for further exploration
-                  if v_potential_depth < depth:
-                      q.append(v_id)
-
-
-    print(f"\nGeometric BFS complete. Nodes before pruning: {G.number_of_nodes()}, Edges: {G.number_of_edges()}")
-    if not merge_last_layer: print(f"Debug: Created {nodes_created_last_layer} distinct nodes at max depth instead of merging.")
-
-    # --- Prune Last Layer (Optional) ---
-    nodes_at_max_depth = [] # Keep track even if not pruning, for attribute setting
-    if depth >= 0: # Find nodes at max depth using node_info
-         nodes_at_max_depth = [
-             nid for nid, data in node_info.items()
-             if nid in G and data.get('depth') == depth # Check nid exists in G too
-         ]
-
-    if prune_last_layer and nodes_at_max_depth:
-        print(f"Pruning {len(nodes_at_max_depth)} nodes at depth {depth}...")
-        G.remove_nodes_from(nodes_at_max_depth)
-        print(f"Graph after pruning: Nodes: {G.number_of_nodes()}, Edges: {G.number_of_edges()}")
-    # --- End Pruning ---
-
-    # Reindex sites after pruning. Reindexing is necessary because we later use the site indices to build matrices
-    # and perform calculations. This ensures that the indices are consistent and sequential.
-
-
-
-
-    # --- Merge Degree-1 Boundary Nodes (Optional) ---
-    if merge_degree_one_boundary:
-        print("Attempting to merge degree-1 boundary nodes...")
-        nodes_to_remove = []
-        neighbors_of_degree_one = collections.defaultdict(list)
-
-        # Identify degree-1 nodes and group by neighbor
-        for node in list(G.nodes()): # Iterate over a copy of node list
-            if G.degree(node) == 1:
-                # Check if node still exists (might have been removed in a previous merge)
-                if node not in G: continue
-                neighbor = list(G.neighbors(node))[0]
-                neighbors_of_degree_one[neighbor].append(node)
-
-        # Perform merging
-        nodes_merged_count = 0
-        for neighbor, degree_one_nodes in neighbors_of_degree_one.items():
-            if len(degree_one_nodes) > 1:
-                # Keep the first node (e.g., lowest ID if sorted, or just the first encountered)
-                node_to_keep = min(degree_one_nodes) # Keep the one with the smallest ID
-                nodes_to_merge = [n for n in degree_one_nodes if n != node_to_keep]
-
-                # Remove the merged nodes from graph and node_info
-                for node_to_merge in nodes_to_merge:
-                    if node_to_merge in G:
-                        G.remove_node(node_to_merge)
-                        if node_to_merge in node_info:
-                            del node_info[node_to_merge]
-                        # Also remove from coords_list if necessary (though less critical after BFS)
-                        coords_list = [(c, nid) for c, nid in coords_list if nid != node_to_merge]
-                        nodes_merged_count += 1
-                        nodes_to_remove.append(node_to_merge) # Keep track if needed
-
-        if nodes_merged_count > 0:
-            print(f"Merged {nodes_merged_count} degree-1 nodes.")
-            print(f"Graph after merging degree-1 nodes: Nodes: {G.number_of_nodes()}, Edges: {G.number_of_edges()}")
-    # --- End Merge Degree-1 ---
-
-
-
-    # --- Determine boundary and Labeling (AFTER pruning and optional merging) ---
-    final_nodes = list(G.nodes()) # Get nodes present after potential pruning/merging
-    if not final_nodes:
-        actual_max_depth = -1
-        boundary_nodes = set()
-    else:
-        # Recalculate max depth based on remaining nodes
-        depths = [node_info[nid]['depth'] for nid in final_nodes if nid in node_info]
-        actual_max_depth = max(depths) if depths else -1
-        boundary_nodes = {nid for nid in final_nodes if nid in node_info and node_info[nid]['depth'] == actual_max_depth and G.degree(nid) == 4
-                          }
-
-    # Sort boundary nodes for consistent position assignment (e.g., by node ID)
-    boundary_node_list = sorted(list(boundary_nodes))
-    boundary_pos_map = {node: i for i, node in enumerate(boundary_node_list)}
-
-    for node in final_nodes:
-        if node not in node_info: continue # Skip if info missing (shouldn't happen ideally)
-        node_data = G.nodes[node] # Get node data dict from graph
-        node_depth = node_info[node].get('depth', -1)
-        # node degree must be 4 to be boundary
-        is_boundary = node in boundary_nodes
-
-        # Basic labels
-        node_data['is_ancilla'] = not is_boundary
-        node_data['is_boundary'] = is_boundary
-
-        # Boundary-specific labels
-        if is_boundary:
-            node_data['boundary_index'] = 0
-            node_data['position_in_boundary'] = boundary_pos_map.get(node, -1) # Assign position
-            node_data['b0'] = True
-            for i in range(1, 10): # Ensure others are False
-                 node_data[f'b{i}'] = False
-        else: # Ancilla node
-            for i in range(10): # Ensure all bX are False
-                 node_data[f'b{i}'] = False
-
-        # Add coordinate and depth from node_info if not already present (should be)
-        node_data.setdefault('depth', node_depth)
-        node_data.setdefault('coord', node_info[node].get('coord', None))
-
-    nx.relabel_nodes(G, {n: m for m, n in enumerate(G.nodes)}, copy=False)
-
-    print(G.nodes)
-
-    H = nx.Graph()
-    H.add_nodes_from(sorted(G.nodes(data=True)))
-    H.add_edges_from(G.edges(data=True))
-    H.graph = deepcopy(G.graph)
-
-    G = H
-
-    print(H.nodes)
-
-
-    # Add graph-level attributes
-    G.graph["number_of_boundaries"] = 1 if boundary_nodes else 0
-    G.graph["max_depth"] = actual_max_depth
-    G.graph["periodic"] = False # Hyperbolic tilings are not periodic in this sense
-    G.graph["subdivided"] = False
-
-    # Add reference to graph attributes in each node
-    graph_attrs_ref = G.graph
-    for node in final_nodes:
-        if node in G: # Check node still exists
-             G.nodes[node]["graph"] = graph_attrs_ref
-    # --- End Labeling ---
-
-
-    # Add attributes to remaining nodes just before returning
-    # final_nodes = list(G.nodes()) # Get nodes present after potential pruning
-    # nx.set_node_attributes(G, {nid: node_info[nid]['depth'] for nid in final_nodes if nid in node_info}, "depth")
-    # nx.set_node_attributes(G, {nid: node_info[nid]['coord'] for nid in final_nodes if nid in node_info}, "coord")
-    # ^^^ This is now handled within the labeling loop ^^^
-
-    return G, raw_neighbor_points
+    return generate_hyperbolic_tiling_3_q_geometric_with_raw(
+        8,
+        depth=depth,
+        epsilon=epsilon,
+        merge_last_layer=merge_last_layer,
+        prune_last_layer=prune_last_layer,
+        merge_degree_one_boundary=merge_degree_one_boundary,
+    )

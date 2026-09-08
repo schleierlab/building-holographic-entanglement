@@ -47,6 +47,21 @@ DEFAULT_HASH_DB = DEFAULT_FIGURES_DIR / ".hashes.json"
 DEFAULT_HISTORY_DB = DEFAULT_FIGURES_DIR / ".hash_history.json"
 
 
+def _display_path(path: str | Path) -> str:
+    """Return a local, non-absolute path for user-facing log messages."""
+    path = Path(path)
+    candidates = [Path.cwd(), Path(__file__).resolve().parent.parent]
+    resolved = path.resolve()
+
+    for base in candidates:
+        try:
+            return str(resolved.relative_to(base.resolve()))
+        except ValueError:
+            pass
+
+    return path.name
+
+
 def compute_file_hash(filepath: str | Path, short: bool = True) -> str:
     """Compute SHA256 hash of a file.
 
@@ -236,6 +251,7 @@ def save_figure_with_hash(
     filepath: str | Path,
     hash_db: str | Path = DEFAULT_HASH_DB,
     history_db: str | Path = DEFAULT_HISTORY_DB,
+    verbose: bool = True,
     **savefig_kwargs
 ) -> dict:
     """Save a figure and update the hash database.
@@ -245,6 +261,7 @@ def save_figure_with_hash(
         filepath: Path to save the figure
         hash_db: Path to the hash database JSON file
         history_db: Path to the history database JSON file
+        verbose: If True, print where the figure and hash records were saved
         **savefig_kwargs: Additional arguments passed to fig.savefig()
 
     Returns:
@@ -269,6 +286,13 @@ def save_figure_with_hash(
     db = load_hash_db(hash_db)
     db[filepath.name] = hashes
     save_hash_db(db, hash_db)
+
+    if verbose:
+        print(
+            f"Saved figure to {_display_path(filepath)}. "
+            f"Hash info updated in {_display_path(hash_db)}; history in {_display_path(history_db)}. "
+            f"file_hash={hashes['file_hash']}, data_hash={hashes['data_hash']}, size={hashes['size']} bytes."
+        )
 
     return hashes
 

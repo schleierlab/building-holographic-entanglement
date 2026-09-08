@@ -1,4 +1,4 @@
-"""Functions for A1_correlations.ipynb - Boundary correlations and mutual information."""
+"""Helper functions for supplementary correlation figures."""
 
 from __future__ import annotations
 
