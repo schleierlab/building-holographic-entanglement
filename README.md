@@ -44,7 +44,7 @@ To see which files would run without executing notebooks, use
 
 ### Quench-And-Measure
 
-Start with an unweighted graph that discretizes a geometry. Collect a set of Gaussian modes with
+Start with a graph that discretizes a geometry. Collect a set of Gaussian modes with
 a number of modes equal to the number of nodes in the graph.  The modes may be initially squeezed
 by some amount $\mu$ (typically $\mu < 1$).  Next, evolve the system under an interaction Hamiltonian
 (a sum of $X_i X_j$ interactions) whose couplings are based on the edges in the graph.
@@ -100,3 +100,42 @@ Depending on what modules you are using, you will want to install the above pack
 
 - If you are running into invalid symplectic eigenvalue issues (e.g. warnings that symplectic
   eigenvalues are too small), assuming everything else is fine, you probably are in an extreme or unphysical regime and should dial back some parameters.
+
+
+## Figure Changelog for v2 (changes since v1 on arXiv)
+
+**This changelog was written by Codex and reviewed by the authors.**
+
+
+The main text figure set remains Figures 1-4. The supplemental figure set has been reorganized and expanded from four figures to eleven figures.
+
+### Existing Figures Kept Or Updated
+
+- Figure 1: regenerated from the cleaned introduction notebook; figure content remains the quench-and-measure protocol, boundary entropy fit, and Rényi entropy comparison.
+- Figure 4: regenerated from the simplified cartography notebook; figure content remains the approximate entanglement-wedge reconstruction diagnostic.
+- Figure S1: kept as the decoration illustration, now generated from `supplementary-notebooks/S01_illustration_of_decoration.ipynb`.
+- Old Figure S2: retained as the scaling-with-size-and-squeezing figure, now Figure S3.
+- Old Figure S3: retained as the correlations/mutual-information comparison, now Figure S6.
+- Old Figure S4: retained as the decorated scaling-dimensions figure, now Figure S7.
+
+
+### New Supplemental Figures
+
+- Figure S2: regular hyperbolic graph discretizations for `{3,7}` and `{3,8}`, including entropy curves and scaled bulk-distance variation.
+- Figure S4: RT-crossover sharpness for two-region entanglement entropy in the undecorated MERA disk.
+- Figure S5: strong-squeezing limit of the undecorated entropy curve, showing lattice-scale/piecewise structure.
+- Figure S8: boundary mutual information for two intervals in the undecorated MERA and regular hyperbolic cases.
+- Figure S9: boundary mutual information for two intervals in the decorated MERA and regular hyperbolic cases.
+- Figure S10: tripartite information compared with the RT prediction for undecorated and decorated MERA/regular hyperbolic graphs.
+- Figure S11: decorated MERA VFPE diagnostics, including the VFPE residual, depth convergence, and central-charge comparison.
+
+### Organization Changes
+
+- Supplemental notebooks now live in `supplementary-notebooks/` and are numbered to match the corresponding supplemental figure numbers.
+- Supplemental figure output filenames now use descriptive names of the form `supplementary-figure_<content>.pdf` rather than the old `supp_<number>_...pdf` style.
+- Old exploratory or superseded notebooks and figure outputs were moved out of the active figure-generation path.
+
+## Acknowledgment of AI-Assisted Coding
+
+AI coding assistants, primarily Codex and then Claude, were used to assist with figure-generation code,
+notebook organization, and repository cleanup, especially for v2. All scientific decisions and manuscript content were controlled by the authors.
