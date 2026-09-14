@@ -112,11 +112,13 @@ The main text figure set remains Figures 1-4. The supplemental figure set has be
 ### Existing Figures Kept Or Updated
 
 - Figure 1: regenerated from the cleaned introduction notebook; figure content remains the quench-and-measure protocol, boundary entropy fit, and Rényi entropy comparison.
+- Figure 2: unchanged wormhole figure.
+- Figure 3: unchanged decorated-graph entropy and correlation figure.
 - Figure 4: regenerated from the simplified cartography notebook; figure content remains the approximate entanglement-wedge reconstruction diagnostic.
 - Figure S1: kept as the decoration illustration, now generated from `supplementary-notebooks/S01_illustration_of_decoration.ipynb`.
-- Old Figure S2: retained as the scaling-with-size-and-squeezing figure, now Figure S3.
-- Old Figure S3: retained as the correlations/mutual-information comparison, now Figure S6.
-- Old Figure S4: retained as the decorated scaling-dimensions figure, now Figure S7.
+- Old Figure S2: retained as the scaling-with-size-and-squeezing figure, now Figure S3, with an updated color scheme.
+- Old Figure S3: retained unchanged as the correlations/mutual-information comparison, now Figure S6.
+- Old Figure S4: retained unchanged as the decorated scaling-dimensions figure, now Figure S7.
 
 
 ### New Supplemental Figures
